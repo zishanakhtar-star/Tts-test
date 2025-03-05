@@ -1,1 +1,269 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluid Animated Orb v2.6</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: rgb(222, 222, 255);
+            overflow: hidden;
+            margin: 0;
+        }
+
+        .orb-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            transition: width .1s ease,height .1s ease;
+        }
+
+        canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            filter: blur(0.7px); /* Increased blur for softer edges */
+            opacity: 0.95; /* Slight transparency for blending effect */
+        }
+
+        .glow {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 120, 255, 0.6) 30%, rgba(0, 0, 255, 0.2) 80%, rgba(0, 0, 255, 0) 100%);
+            filter: blur(30px);
+            transition: filter 0.2s ease-in-out, opacity 0.2s ease-in-out;
+        }
+
+        #audioInput {
+            padding: 10px;
+            background: #222;
+            color: white;
+            border: none;
+            cursor: pointer;
+            background: #c6c1ffd3;
+            border-radius: 50px;
+            position: absolute;
+            bottom: 90px;
+            width: 87vw;
+            height: 60px;
+            line-height: 74px;
+          
+        }
+        
+        .ctrl-container{
+          position: absolute;
+          bottom: 10px;
+          margin-top: 20px;
+          padding: 7px 15px;
+          border-radius: 50px;
+          background:#c6c1ffd3;
+          width: 87vw;
+          height: 60px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        
+        .ctrl-btn{
+          background: #dbd8fe;
+          border: none;
+          outline: none;
+          border-radius: 50%;
+          width: 59px;
+          height: 59px;
+          padding: 7px 12px;
+          font-weight: 700;
+          font-size: 12px;
+          cursor: pointer;
+          color: #629aff;
+        }
+        
+        #audioInput{
+          display: none;
+        }
+        
+        #choose-file-btn{
+          position: absolute;
+          bottom: 32px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 1;
+          background: #b3abff;
+          border: none;
+          outline: none;
+          border-radius: 17px;
+          padding: 9px 17px;
+          color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="orb-container">
+        <div class="glow"></div>
+        <canvas id="fluidCanvas"></canvas>
+    </div>
+
+    <button id="choose-file-btn">Choose File</button>
+    <input type="file" id="audioInput" accept="audio/*">
+   <div class="ctrl-container">
+    <button class="ctrl-btn" id="stop-btn">Stop</button>
+    <button class="ctrl-btn" id="start-btn">Play</button>
+  </div>
+
+    <script>
+        const canvas = document.getElementById("fluidCanvas");
+        const stop_btn = document.getElementById("stop-btn");
+        const start_btn = document.getElementById("start-btn");
+        const orb = document.querySelector(".orb-container");
+        const ctx = canvas.getContext("2d");
+        const glow = document.querySelector(".glow");
+        const audioInput = document.getElementById("audioInput");
+        const chooseFileBtn = document.getElementById('choose-file-btn');
+        const fileVariable = document.getElementById('file-variable');
+
+        canvas.width = 200;
+        canvas.height = 200;
+
+        let time = 0;
+        let audioContext, analyser, dataArray;
+        let bass = 0, mids = 0, treble = 0;
+
+        function setupAudio(file) {
+            if (audioContext) audioContext.close();
+
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                audioContext.decodeAudioData(event.target.result, function(buffer) {
+                    const source = audioContext.createBufferSource();
+                    source.buffer = buffer;
+                    const gainNode = audioContext.createGain();
+                    analyser = audioContext.createAnalyser();
+
+                    source.connect(gainNode);
+                    gainNode.connect(analyser);
+                    analyser.connect(audioContext.destination);
+
+                    analyser.fftSize = 512;
+                    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                      source.start();
+                    
+                    stop_btn.onclick=function(){
+                      source.stop();
+                    }
+                    analyzeAudio();
+                });
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function analyzeAudio() {
+            requestAnimationFrame(analyzeAudio);
+            analyser.getByteFrequencyData(dataArray);
+            
+
+            let low = 0, mid = 0, high = 0;
+            let bassCount = 0, midCount = 0, trebleCount = 0;
+
+            for (let i = 0; i < dataArray.length; i++) {
+                if (i < dataArray.length * 0.2) {
+                    low += dataArray[i];
+                    bassCount++;
+                } else if (i < dataArray.length * 0.6) {
+                    mid += dataArray[i];
+                    midCount++;
+                } else {
+                    high += dataArray[i];
+                    trebleCount++;
+                }
+            }
+
+            bass = bassCount ? low / bassCount / 255 : 0;
+            mids = midCount ? mid / midCount / 255 : 0;
+            treble = trebleCount ? high / trebleCount / 255 : 0;
+            console.log(treble)
+            orb.style.height = 300+mids*53 + "px"
+            orb.style.width = 300+mids*53 + "px"
+            
+        
+        }
+
+        function drawFluid() {
+            const imgData = ctx.createImageData(canvas.width, canvas.height);
+            const pixels = imgData.data;
+
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const index = (y * canvas.width + x) * 4;
+
+                    const noise = Math.sin(x * 0.015 + time * bass * 2) *
+                                  Math.cos(y * 0.015 + time * mids * 2);
+
+                    const brightness = 1 + (mids * 3);
+                    const bassEffect = bass * 50;
+                    const trebleEffect = treble * 70;
+
+                    const r = (150 - noise * 40) + bassEffect;
+                    const g = (170 - noise * 50) + trebleEffect;
+                    const b = 255 * brightness;
+
+                    pixels[index] = Math.min(r, 255);
+                    pixels[index + 1] = Math.min(g, 255);
+                    pixels[index + 2] = Math.min(b, 255);
+                    pixels[index + 3] = 220; // Reduced opacity for blending
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+            updateGlow();
+
+            time += 0.0009;
+            requestAnimationFrame(drawFluid);
+        }
+
+        function updateGlow() {
+            const intensity = Math.max(bass, mids, treble);
+            const glowSize = 30 + intensity * 100;
+            const glowOpacity = .5 + intensity * .8;
+
+            glow.style.filter = `blur(${glowSize}px)`;
+            glow.style.opacity = glowOpacity;
+        }
+
+  chooseFileBtn.addEventListener('click', () => {
+    audioInput.onchange = (event) => {
+      const file = event.target.files[0];
+      console.log(file)
+      console.log("playnow")
+      setupAudio(file);  
+    };
+    audioInput.click();
+    
+  });
+
+
+        drawFluid();
+        
+        
+        start_btn.onclick=function(){
+          if(audioInput.files.length>0){
+            setupAudio(audioInput.files[0])
+          }
+        }
+    </script>
+
+</body>
+</html>
